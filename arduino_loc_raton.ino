@@ -30,6 +30,24 @@ const byte maskPID      = 0xE0; // idem
 const byte regYmov = 0x42; // a2620
 const byte regXmov = 0x43;  //a2620
 
+char dx = 0;
+char dy = 0;
+
+
+void setup()
+{
+  pinMode(SCLK, OUTPUT);
+  pinMode(SDIO, OUTPUT);
+
+  Serial.begin(38400);
+  Serial.println("Serial established.");
+  Serial.flush();
+
+  mouseInit();
+  dumpDiag();
+
+}
+
 void mouseInit(void)
 {
   digitalWrite(SCLK, HIGH);
@@ -51,6 +69,19 @@ void dumpDiag(void)
   Serial.println( (unsigned int)((val & maskPID) >> 5));
   Serial.println("Ready.");
   Serial.flush();
+}
+
+void loop()
+{
+  dx = (char)readRegister(regXmov); // read X movement register
+  dy = (char)readRegister(regYmov); // read Y movement register
+  if (dx != 0 || dy != 0)
+  {
+    Serial.print(dx, DEC);
+    Serial.print(" ");
+    Serial.println(dy, DEC);
+    Serial.flush();
+  }
 }
 
 void writeRegister(byte addr, byte data)
@@ -75,6 +106,8 @@ void writeRegister(byte addr, byte data)
     digitalWrite (SDIO, data & (1 << (i - 1) ));
     digitalWrite (SCLK, HIGH);
   }
+
+  delayMicroseconds(105);
 }
 
 byte readRegister(byte addr)
@@ -102,13 +135,13 @@ byte readRegister(byte addr)
     r |= (digitalRead (SDIO) << (i - 1) );
   }
 
-  delayMicroseconds(110);  //Tailing delay guarantees >100 µsec before next transaction
+  //delayMicroseconds(110);  //Tailing delay guarantees >100 µsec before next transaction
 
   return r;
 }
 
 //ADNS2610 dumps a 324-byte array, so this function assumes arr points to a buffer of at least 324 bytes. (A2620: unchanged)
-void readFrame(byte *arr)
+void readFrame(byte * arr)
 {
   byte *pos;
   byte *uBound;
@@ -151,78 +184,6 @@ void readFrame(byte *arr)
 
 }
 
-void setup()
-{
-  pinMode(SCLK, OUTPUT);
-  pinMode(SDIO, OUTPUT);
 
-  Serial.begin(38400);
-  Serial.println("Serial established.");
-  Serial.flush();
 
-  mouseInit();
-  dumpDiag();
 
-}
-
-void loop()
-{
-  int input;
-  byte buff;
-
-  //readFrame(frame);
-
-  if ( Serial.available() )
-  {
-    input = Serial.read();
-    switch ( input )
-    {
-      case 'f':      // capture frame
-        Serial.println("Frame capture.");
-        readFrame(frame);
-        Serial.println("Done.");
-        break;
-      case 'd': // dump frame, raw data
-        for ( input = 0; input < FRAMELENGTH; input++ ) //Reusing 'input' here
-          Serial.write( (byte) frame[input] ); // use serial.write so it does not convert to ascii, --Luke
-        Serial.write( (byte) 127 );
-        break;
-      case 'p': // Powerup sequence
-        mouseInit();
-        dumpDiag();
-        break;
-      case 'x':  // read X movement register
-        buff = readRegister(regXmov);
-        Serial.print((byte) buff);
-        Serial.print(" ");
-        break;
-      case 'y':  // read Y movement register
-        buff = readRegister(regYmov);
-        Serial.print((byte) buff);
-        Serial.print(" ");
-        break;
-      case 's':  // Shutdown
-        writeRegister(regConfig, 0xE0);
-        Serial.print("Shutdown");
-        break;
-      case 'i': // Dump frame values seperated and human readable
-
-        for ( input = 0; input < FRAMELENGTH; input++ ) { //Reusing 'input' here
-          Serial.print( (byte) frame[input]);
-          Serial.print( " ");
-          // maybe find something to print LF each 18th datapoint?
-        }
-        Serial.print( (byte)127 );
-        break;
-      case 't': // test image
-
-        for ( input = 0; input < FRAMELENGTH; input++ ) { //Reusing 'input' here
-          Serial.write( (byte) input % 64);
-        }
-        Serial.write( (byte) 127 );
-        break;
-
-    }
-    Serial.flush();
-  }
-}
